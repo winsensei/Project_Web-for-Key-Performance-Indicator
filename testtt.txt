@@ -1,0 +1,640 @@
+<template>
+  <div class="row">
+    <div class="d-flex justify-content-end mb-3">
+      <p @click="copy()" class="pb-0 mb-4 mt-1">
+        <span class="text-center mr-10 text-link">
+          <v-icon end icon="mdi-paperclip" size="small"></v-icon>
+          คัดลอกลิงค์สำหรับผู้เข้าร่วม
+        </span>
+      </p>
+      <v-btn class="float-right ml-3" type="button" text-color="" @click="BackBtn">
+        ย้อนกลับ
+      </v-btn>
+    </div>
+    <div class="col-lg-12 col-xxl-12">
+      <div class="card card-custom card-stretch gutter-b">
+        <div class="card-body pt-0 pb-5 mb-0 mt-8">
+          <v-row class="mb-0">
+            <v-col sm="3">
+              <v-text-field
+                density="compact"
+                variant="solo"
+                placeholder="ค้นหา"
+                prepend-inner-icon="mdi-magnify"
+                single-line
+                v-model="pagination.filter"
+                hide-details
+                clearable
+                @click:clear="clearFilter"
+                @input="fetchData"
+                @click:prepend-inner="fetchData"
+              ></v-text-field>
+            </v-col>
+            <v-col cols="12" sm="3" md="3">
+              <v-menu
+                v-model="menuStart"
+                :close-on-content-click="false"
+                :nudge-right="40"
+                transition="scale-transition"
+                offset-y
+                min-width="290px"
+              >
+                <template v-slot:activator="{ props }">
+                  <v-text-field
+                    :modelValue="dateFormattedStart(pagination.start_date)"
+                    density="compact"
+                    variant="solo"
+                    append-inner-icon="mdi-calendar"
+                    readonly
+                    clearable
+                    @click:clear="clearStartDate"
+                    @input="fetchData"
+                    hide-details
+                    single-line
+                    placeholder="เลือกวันที่เริ่มต้น"
+                    v-bind="props"
+                  ></v-text-field>
+                </template>
+                <v-locale-provider>
+                  <v-date-picker
+                    hide-action
+                    title=""
+                    v-model="pagination.start_date"
+                    @update:modelValue="colseMenuStart"
+                  ></v-date-picker>
+                </v-locale-provider>
+              </v-menu>
+            </v-col>
+            <v-col cols="12" sm="3" md="3">
+              <v-menu
+                v-model="menuEnd"
+                :close-on-content-click="false"
+                :nudge-right="40"
+                transition="scale-transition"
+                offset-y
+                min-width="290px"
+              >
+                <template v-slot:activator="{ props }">
+                  <v-text-field
+                    :modelValue="dateFormattedEnd(pagination.end_date)"
+                    density="compact"
+                    variant="solo"
+                    append-inner-icon="mdi-calendar"
+                    readonly
+                    clearable
+                    @click:clear="clearEndDate"
+                    @input="fetchData"
+                    hide-details
+                    single-line
+                    placeholder="เลือกวันที่สิ้นสุด"
+                    v-bind="props"
+                  ></v-text-field>
+                </template>
+                <v-locale-provider>
+                  <v-date-picker
+                    hide-actions
+                    title=""
+                    v-model="pagination.end_date"
+                    @update:modelValue="colseMenuEnd"
+                  ></v-date-picker>
+                </v-locale-provider>
+              </v-menu>
+            </v-col>
+          </v-row>
+        </div>
+        <div class="card-body px-0 pt-0 tab-content m-0">
+          <div class="table-responsive table-md">
+            <v-data-table
+              :headers="fields"
+              :items="dataItem"
+              :items-per-page="pagination.perPage"
+              class="elevation-1"
+            >
+              <template v-slot:headers="{ columns, isSorted, getSortIcon }">
+                <tr>
+                  <template v-for="(column, index) in columns" :key="column.key">
+                    <td class="bg-header-table cursor-pointer" :class="column.align">
+                      <span class="mr-2" @click="() => toggleSortTable(column, index)">{{
+                        column.title
+                      }}</span>
+                      <template v-if="column.sortableCustom && pagination.orderBy == column.key">
+                        <img :src="getAssetPath('sort_icon.svg')" />
+                      </template>
+                    </td>
+                  </template>
+                </tr>
+              </template>
+              <template v-slot:item.created_at="{ item, index }">
+                <div class="text-center">{{ dateTh(item.created_at) }}</div>
+              </template>
+              <template v-slot:item.fullname="{ item }">
+                <div class="text-left">
+                  {{
+                    item.project_participant ? item.project_participant.user_profile.fullname : ""
+                  }}
+                </div>
+              </template>
+              <template v-slot:item.citizen_id="{ item }">
+                <div class="text-left">
+                  {{
+                    item.project_participant
+                      ? useFormatIdCard(item.project_participant.user_profile.citizen_id)
+                      : ""
+                  }}
+                </div>
+              </template>
+              <template v-slot:item.form_questionnaire_user_status="{ item }">
+                <div class="d-flex justify-content-center">
+                  <v-chip color="green">
+                    บันทึกแล้ว
+                    <span class="svg-icon svg-icon-md svg-icon-success">
+                      <inline-svg src="media/svg/icons/Table/Tick_circle_green.svg"></inline-svg>
+                    </span>
+                  </v-chip>
+                  <v-btn
+                    icon="mdi-pen"
+                    size="x-small"
+                    variant="tonal"
+                    class="ml-2"
+                    @click="openQuestionnaireUserForm(item.id)"
+                  >
+                    <span class="svg-icon svg-icon-md svg-icon-success">
+                      <inline-svg src="media/svg/icons/Table/Edit_3_grey.svg"></inline-svg> </span
+                  ></v-btn>
+                </div>
+              </template>
+              <template v-slot:item.form_questionnaire_psq_status="{ item }">
+                <div
+                  v-if="item.form_questionnaire_psq_status"
+                  class="d-flex justify-content-center"
+                >
+                  <v-chip color="green">
+                    บันทึกแล้ว
+                    <span class="svg-icon svg-icon-md svg-icon-success">
+                      <inline-svg src="media/svg/icons/Table/Tick_circle_green.svg"></inline-svg>
+                    </span>
+                  </v-chip>
+                  <v-btn
+                    icon="mdi-pen"
+                    size="x-small"
+                    variant="tonal"
+                    class="ml-2"
+                    @click="openPsq9Form(item.id, item.form_questionnaire_psq_status)"
+                  >
+                    <span class="svg-icon svg-icon-md svg-icon-success">
+                      <inline-svg src="media/svg/icons/Table/Edit_3_grey.svg"></inline-svg> </span
+                  ></v-btn>
+                </div>
+                <div v-else>
+                  <a @click="openPsq9Form(item.id)" class="cursor-pointer">
+                    <v-chip color="blue"
+                      >เริ่มบันทึก
+                      <span class="svg-icon svg-icon-md svg-icon-success">
+                        <inline-svg src="media/svg/icons/Table/Arrow_right_blue.svg"></inline-svg>
+                      </span>
+                    </v-chip>
+                  </a>
+                </div>
+              </template>
+              <template v-slot:item.form_questionnaire_mini_cog_status="{ item }">
+                <div
+                  v-if="item.form_questionnaire_mini_cog_status"
+                  class="d-flex justify-content-center"
+                >
+                  <v-chip color="green">
+                    บันทึกแล้ว
+                    <span class="svg-icon svg-icon-md svg-icon-success">
+                      <inline-svg src="media/svg/icons/Table/Tick_circle_green.svg"></inline-svg>
+                    </span>
+                  </v-chip>
+                  <v-btn
+                    icon="mdi-pen"
+                    size="x-small"
+                    variant="tonal"
+                    class="ml-2"
+                    @click="MiniCogFraxForm(item.form_questionnaire_mini_cog_status, item.id)"
+                  >
+                    <span class="svg-icon svg-icon-md svg-icon-success">
+                      <inline-svg src="media/svg/icons/Table/Edit_3_grey.svg"></inline-svg> </span
+                  ></v-btn>
+                </div>
+                <div v-else>
+                  <a
+                    @click="MiniCogFraxForm(item.form_questionnaire_mini_cog_status, item.id)"
+                    class="cursor-pointer"
+                  >
+                    <v-chip color="blue"
+                      >เริ่มบันทึก
+                      <span class="svg-icon svg-icon-md svg-icon-success">
+                        <inline-svg src="media/svg/icons/Table/Arrow_right_blue.svg"></inline-svg>
+                      </span>
+                    </v-chip>
+                  </a>
+                </div>
+              </template>
+
+              <template v-slot:item.action="{ item }">
+                <a
+                  href="javascript:"
+                  @click.prevent="removeData(item.id)"
+                  class="btn btn-icon btn-light btn-xs bg-cancle"
+                  :title="$t('PAGE.DEFAULT.TABLE.FIELDS.ACTION.DELETE.TITLE')"
+                >
+                  <span class="svg-icon svg-icon-md svg-icon-danger">
+                    <inline-svg src="media/svg/icons/Table/Trash.svg"></inline-svg>
+                  </span>
+                </a>
+              </template>
+
+              <template v-slot:item.latest_data_collector="{ item }">
+                <div class="text-left">{{ item.latest_data_collector.fullname }}</div>
+              </template>
+
+              <template v-slot:bottom>
+                <div class="pagination-card d-flex justify-content-between card-body pb-0">
+                  <div class="col-lg-5">
+                    <div class="d-flex justify-content-lg-start w-100 col">
+                      <span> ทั้งหมด {{ totalData }} รายการ</span>
+                    </div>
+                  </div>
+                  <div class="col-lg-5">
+                    <v-pagination
+                      v-model="pagination.page"
+                      :length="total"
+                      @update:model-value="fetchData"
+                      class="paginate-catalog mr-2"
+                    ></v-pagination>
+                  </div>
+                </div>
+              </template>
+            </v-data-table>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+</template>
+<style>
+.text-link {
+  text-decoration: underline;
+  color: #006692;
+  cursor: pointer;
+}
+.table-md .v-table .v-table__wrapper > table {
+  width: 118%;
+  overflow-x: scroll;
+}
+.v-table .v-table__wrapper > table > thead > tr > th {
+  background-color: #f3f6f9 !important;
+}
+@media screen and (max-) {
+  .pagination-card {
+    display: block !important;
+  }
+  /*.v-table > .v-table__wrapper > table {
+  }*/
+}
+</style>
+
+<script lang="ts">
+import { getAssetPath } from "@/core/helpers/assets";
+import { defineComponent, ref, onMounted, computed } from "vue";
+import { useI18n } from "vue-i18n";
+import { useRoute } from "vue-router";
+import { useRouter } from "vue-router";
+import { dateTh } from "@/core/helpers/config";
+import { useQuestionNaireResultStore } from "@/stores/questionnaire_result";
+import Swal from "sweetalert2/dist/sweetalert2.js";
+import useClipboard from "vue-clipboard3";
+import { useFormatIdCard } from "@/composables/useFormatIdCard";
+
+export default defineComponent({
+  name: "examination_history_DDS_Table",
+  components: {},
+
+  setup() {
+    const { t } = useI18n();
+    const route = useRoute();
+    const router = useRouter();
+    const store = useQuestionNaireResultStore();
+
+    const pagination = computed({
+      get: () => store.pagination,
+      set: (value) => store.setPagination(value)
+    });
+    const isClearPagination = computed({
+      get: () => store.isClearPagination,
+      set: (value) => store.setIsClearPagination(value)
+    });
+    const fields: any = ref([
+      {
+        title: `${t("PAGE.DEFAULT.TABLE.FIELDS.CREATE_AT")}`,
+        align: "center text-center border-b border-e",
+        sortable: true,
+        key: "created_at",
+        isFilter: false,
+        sortableCustom: true,
+        width: "10%"
+      },
+      {
+        title: `ชื่อ-สกุล`,
+        align: "left border-b border-e",
+        key: "fullname",
+        isFilter: true,
+        sortable: true,
+        sortableCustom: true,
+        width: "15%"
+      },
+      {
+        title: `เลขบัตรประชาชน`,
+        align: "left border-b border-e",
+        key: "citizen_id",
+        isFilter: true,
+        sortable: true,
+        sortableCustom: true,
+        width: "12%"
+      },
+      {
+        title: `แบบสอบถาม (User)`,
+        align: "center text-center border-b border-e",
+        key: "form_questionnaire_user_status",
+        isFilter: false,
+        sortable: false,
+        width: "10%"
+      },
+      {
+        title: `แบบทดสอบ PHQ9`,
+        align: "center text-center border-b border-e",
+        key: "form_questionnaire_psq_status",
+        isFilter: false,
+        sortable: false,
+        width: "10%"
+      },
+      {
+        title: `Mini - Cog FRAX กระดูกพรุน `,
+        align: "center text-center border-b border-e",
+        key: "form_questionnaire_mini_cog_status",
+        isFilter: false,
+        sortable: false,
+        width: "10%"
+      },
+      {
+        title: `ดำเนินการ`,
+        align: "center text-center border-b border-e",
+        key: "action",
+        isFilter: false,
+        sortable: false,
+        width: "8%"
+      },
+      {
+        title: `ผู้แก้ไขล่าสุด`,
+        align: "left border-b",
+        key: "latest_data_collector",
+        isFilter: false,
+        sortableCustom: true,
+        width: "15%"
+      }
+    ]);
+    const dataItem: any = ref([]);
+    const questionnaire_round_id: any = ref(null);
+    const total: any = ref(0);
+    const totalData: any = ref(0);
+    const paginationOptions = ref([25, 50, 100, 200]);
+    const dataList = ref([
+      {
+        id: 1,
+        name: "item1"
+      },
+      {
+        id: 2,
+        name: "item2"
+      },
+      {
+        id: 3,
+        name: "item3"
+      }
+    ]);
+    const menuStart = ref<boolean>(false);
+    const menuEnd = ref<boolean>(false);
+
+    onMounted(async () => {
+      questionnaire_round_id.value = Number(route.params.id);
+      totalData.value = dataItem.value.length;
+      await fetchData();
+    });
+    const colseMenuStart = async () => {
+      menuStart.value = false;
+      await fetchData();
+    };
+    const colseMenuEnd = async () => {
+      menuEnd.value = false;
+      await fetchData();
+    };
+    const clearStartDate = () => {
+      pagination.value.start_date = null;
+      fetchData();
+    };
+    const clearEndDate = () => {
+      pagination.value.end_date = null;
+      fetchData();
+    };
+    const clearFilter = () => {
+      pagination.value.filter = "";
+      fetchData();
+    };
+    function filterDate(date: any): string | null {
+      if (!date) {
+        return null;
+      } else {
+        let dateFormat = new Date(date);
+        let day = dateFormat.getDate();
+        let month = dateFormat.getMonth() + 1;
+        let year = dateFormat.getFullYear();
+        return `${year}-${month}-${day}`;
+      }
+    }
+    const toggleSortTable = async (data, index) => {
+      fields.value[index].isDesc = fields.value[index].isDesc ? false : true;
+      pagination.value.orderBy = data.key;
+      pagination.value.isDesc = fields.value[index].isDesc;
+      await fetchData();
+    };
+    const fetchData = async () => {
+      try {
+        const response = await store.paginationQuestionNaireResultData({
+          params: getParams()
+        });
+        if (response.data.status == "success") {
+          let data = response.data.data.data;
+
+          /*    data.map((data: any) => {
+            data.fullname = data.project_participant.user_profile.fullname;
+            data.citizen_id = data.project_participant.user_profile.citizen_id;
+
+            return data;
+          }); */
+          dataItem.value = data;
+          total.value = response.data.data.lastPage;
+          totalData.value = response.data.data.total;
+        }
+      } catch (error) {
+        console.error(error);
+      }
+    };
+    const getParams = () => {
+      const orderByIndex = fields.value.findIndex(
+        (item) => item.value === pagination.value.orderBy.toString()
+      );
+
+      return {
+        page: pagination.value.page.toString(),
+        perPage: pagination.value.perPage.toString(),
+        orderBy: orderByIndex != -1 ? fields.value[orderByIndex].key_table : "id",
+        isDesc: pagination.value.isDesc.toString(),
+        filter: pagination.value.filter.toString(),
+        filter_start_date: filterDate(pagination.value.start_date),
+        filter_end_date: filterDate(pagination.value.end_date),
+        filterBy: `${fields.value
+          .map((item) => {
+            if (item.isFilter) return item.key;
+          })
+          .filter((item) => !!item)}`,
+        questionnaire_round_id: questionnaire_round_id.value
+        // section_id: 24,
+      };
+    };
+    const dateFormattedStart = (date_start) => {
+      return formatDate(date_start);
+    };
+    const dateFormattedEnd = (date_end) => {
+      return formatDate(date_end);
+    };
+    function formatDate(date: string): string | null {
+      if (!date) {
+        return null;
+      } else {
+        let dateFormat = new Date(date);
+        let day = dateFormat.getDate();
+        let month = dateFormat.getMonth() + 1;
+        let year = dateFormat.getFullYear();
+
+        return `${day}/${month}/${year}`;
+      }
+    }
+    const BackBtn = async () => {
+      router.push(`/examination_history`);
+    };
+    const openQuestionnaireUserForm = async (id: any = null) => {
+      router.push({
+        path: `/examination_history/md/edit_form_user/${id}`,
+        query: { questionnaire_round_id: questionnaire_round_id.value }
+      });
+    };
+    const MiniCogFraxForm = async (id: any = null, parent_id: any = null) => {
+      let query: any = {
+        questionnaire_round_id: questionnaire_round_id.value
+      };
+
+      if (id) {
+        query.questionnaire_result_id = id;
+      }
+
+      query.parent_id = parent_id;
+      router.push({
+        path: `/examination_history/participants/md/mini_cog_form`,
+        query: query
+      });
+    };
+    const openPsq9Form = async (parentId: any = null, id: any = null) => {
+      let query: any = {
+        questionnaire_round_id: questionnaire_round_id.value,
+        parent_id: parentId
+      };
+
+      if (id) {
+        query.questionnaire_result_id = id;
+      }
+
+      router.push({
+        path: `/examination_history/participants/MD/psq_form`,
+        query: query
+      });
+    };
+    const removeData = async (id: any) => {
+      Swal.fire({
+        text: `${t("PAGE.DEFAULT.TABLE.FIELDS.ACTION.DELETE.DESC")}`,
+        icon: "warning",
+        showCancelButton: true,
+        showConfirmButton: true,
+        confirmButtonText: `${t("PAGE.DEFAULT.FORM.BTN_OK")}`,
+        cancelButtonText: `${t("PAGE.DEFAULT.FORM.BTN_CANCEL")}`
+      }).then(async (result) => {
+        if (result.isConfirmed) {
+          await store
+            .deleteQuestionNaireResultData({ id })
+            .then(({ data }) => {
+              if (data.status === "success") {
+                Swal.fire({
+                  icon: "success",
+                  text: `${t("RESPONSE_MESSAGE." + data.data)}`,
+                  confirmButtonText: `${t("PAGE.DEFAULT.FORM.BTN_OK")}`
+                });
+                fetchData();
+              } else if (data.status === "error" && data.error) {
+                Swal.fire({
+                  icon: "error",
+                  text: `${t("RESPONSE_MESSAGE." + data.error)}`,
+                  confirmButtonText: `${t("PAGE.DEFAULT.FORM.BTN_OK")}`
+                });
+              }
+            })
+            .catch((error) => {
+              Swal.fire({
+                icon: "error",
+                text: `${error.error}`,
+                confirmButtonText: `${t("PAGE.DEFAULT.FORM.BTN_OK")}`
+              });
+            });
+        }
+      });
+    };
+    const { toClipboard } = useClipboard();
+    const copy = async () => {
+      let path_url = import.meta.env.VITE_APP_URL_PATH;
+      await toClipboard(
+        `${path_url}/#/examination_history/md/create_form_user/?questionnaire_round_id=${questionnaire_round_id.value}`
+      );
+    };
+
+    return {
+      dataItem,
+      fields,
+      paginationOptions,
+      total,
+      pagination,
+      fetchData,
+      clearStartDate,
+      clearEndDate,
+      dateFormattedStart,
+      dateFormattedEnd,
+      menuStart,
+      menuEnd,
+      colseMenuStart,
+      colseMenuEnd,
+      dateTh,
+      clearFilter,
+      dataList,
+      totalData,
+      BackBtn,
+      openQuestionnaireUserForm,
+      MiniCogFraxForm,
+      openPsq9Form,
+      removeData,
+      getAssetPath,
+      toggleSortTable,
+      copy,
+      useFormatIdCard
+    };
+  }
+});
+</script>
